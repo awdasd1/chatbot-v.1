@@ -59,7 +59,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ onBack }) => {
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
-          'Authorization': 'Bearer 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',
+          'Authorization': 'Bearer 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',
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
