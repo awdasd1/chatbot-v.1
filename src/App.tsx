@@ -1,18 +1,26 @@
-import React, { useState } from 'react';
-import WelcomePage from './components/WelcomePage';
-import ChatBot from './components/ChatBot';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { LogtoProvider, LogtoConfig } from '@logto/react';
+import Home from './pages/Home';
+import Callback from './pages/Callback';
+
+const config: LogtoConfig = {
+  endpoint: 'https://logto.mja.lat/',
+  appId: 'o8iv2f0bi5a7bfy22i662',
+};
 
 function App() {
-  const [showChat, setShowChat] = useState(false);
-
   return (
-    <div className="min-h-screen">
-      {!showChat ? (
-        <WelcomePage onEnterChat={() => setShowChat(true)} />
-      ) : (
-        <ChatBot onBack={() => setShowChat(false)} />
-      )}
-    </div>
+    <LogtoProvider config={config}>
+      <Router>
+        <div className="min-h-screen">
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/callback" element={<Callback />} />
+          </Routes>
+        </div>
+      </Router>
+    </LogtoProvider>
   );
 }
 
