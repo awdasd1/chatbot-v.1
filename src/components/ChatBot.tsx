@@ -54,7 +54,8 @@ const ChatBot: React.FC<ChatBotProps> = ({ onBack }) => {
 
       if (response.ok) {
         const data = await response.json();
-        return data.response || data.message || 'تم استلام رسالتك بنجاح من سير العمل';
+        // استخراج الرد من حقل output
+        return data.output || data.response || data.message || 'تم استلام رسالتك بنجاح من سير العمل';
       } else {
         throw new Error('فشل في الاتصال بسير العمل');
       }
