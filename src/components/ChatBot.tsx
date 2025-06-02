@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, ArrowLeft, Bot, User, Paperclip, Image, FileText, ChevronDown, Trash2, Workflow, Download } from 'lucide-react';
+import { Send, ArrowLeft, Bot, User, Paperclip, Image, FileText, ChevronDown, Trash2, Workflow } from 'lucide-react';
 import ModelSelector from './ModelSelector';
 
 interface Message {
@@ -8,12 +8,6 @@ interface Message {
   sender: 'user' | 'bot';
   timestamp: Date;
   attachments?: File[];
-  downloadableFile?: {
-    name: string;
-    content: string;
-    type: string;
-    size: number;
-  };
 }
 
 interface ChatBotProps {
@@ -73,66 +67,6 @@ const ChatBot: React.FC<ChatBotProps> = ({ onBack }) => {
     });
   };
 
-  // تنزيل ملف نصي
-  const downloadTextFile = (fileName: string, content: string) => {
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
-  // تحليل الاستجابة من n8n للبحث عن ملفات
-  const parseN8nResponse = (data: any) => {
-    let responseContent = data.output || data.response || data.message || 'تم استلام رسالتك بنجاح من سير العمل';
-    let downloadableFile = null;
-
-    // البحث عن ملف file.text في الاستجابة
-    if (data.file && data.file.name === 'file.text' && data.file.content) {
-      downloadableFile = {
-        name: data.file.name,
-        content: data.file.content,
-        type: 'text/plain',
-        size: new Blob([data.file.content]).size
-      };
-      responseContent = 'تم إنشاء ملف نصي يحتوي على الرد الكامل. يمكنك تنزيله من الأسفل.';
-    } else if (data.files && Array.isArray(data.files)) {
-      // البحث في مصفوفة الملفات
-      const textFile = data.files.find((file: any) => file.name === 'file.text' || file.filename === 'file.text');
-      if (textFile && textFile.content) {
-        downloadableFile = {
-          name: textFile.name || textFile.filename || 'file.text',
-          content: textFile.content,
-          type: 'text/plain',
-          size: new Blob([textFile.content]).size
-        };
-        responseContent = 'تم إنشاء ملف نصي يحتوي على الرد الكامل. يمكنك تنزيله من الأسفل.';
-      }
-    } else if (typeof data === 'object') {
-      // البحث في جميع خصائص الكائن
-      for (const key in data) {
-        if (data[key] && typeof data[key] === 'object') {
-          if (data[key].name === 'file.text' && data[key].content) {
-            downloadableFile = {
-              name: data[key].name,
-              content: data[key].content,
-              type: 'text/plain',
-              size: new Blob([data[key].content]).size
-            };
-            responseContent = 'تم إنشاء ملف نصي يحتوي على الرد الكامل. يمكنك تنزيله من الأسفل.';
-            break;
-          }
-        }
-      }
-    }
-
-    return { responseContent, downloadableFile };
-  };
-
   const sendToN8nWorkflow = async (message: string, files?: File[]) => {
     try {
       // إذا كان هناك ملفات PDF، نرسلها كـ FormData
@@ -178,7 +112,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ onBack }) => {
 
         if (response.ok) {
           const data = await response.json();
-          return parseN8nResponse(data);
+          return data.output || data.response || data.message || 'تم استلام رسالتك والملفات بنجاح من سير العمل';
         } else {
           throw new Error('فشل في الاتصال بسير العمل');
         }
@@ -204,7 +138,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ onBack }) => {
 
         if (response.ok) {
           const data = await response.json();
-          return parseN8nResponse(data);
+          return data.output || data.response || data.message || 'تم استلام رسالتك بنجاح من سير العمل';
         } else {
           throw new Error('فشل في الاتصال بسير العمل');
         }
@@ -243,10 +177,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ onBack }) => {
 
       if (response.ok) {
         const data = await response.json();
-        return {
-          responseContent: data.choices[0].message.content,
-          downloadableFile: null
-        };
+        return data.choices[0].message.content;
       } else {
         throw new Error('فشل في الاتصال بالخدمة');
       }
@@ -274,28 +205,24 @@ const ChatBot: React.FC<ChatBotProps> = ({ onBack }) => {
     setIsLoading(true);
 
     try {
-      let result: { responseContent: string; downloadableFile: any };
+      let responseContent: string;
 
       if (selectedModel === 'n8n-workflow') {
-        result = await sendToN8nWorkflow(messageToSend, filesToSend);
+        responseContent = await sendToN8nWorkflow(messageToSend, filesToSend);
       } else {
         // OpenRouter لا يدعم الملفات حالياً
         if (filesToSend && filesToSend.length > 0) {
-          result = {
-            responseContent: 'عذراً، رفع الملفات متاح فقط مع سير العمل n8n. يرجى تغيير النموذج إلى "سير العمل الذكي".',
-            downloadableFile: null
-          };
+          responseContent = 'عذراً، رفع الملفات متاح فقط مع سير العمل n8n. يرجى تغيير النموذج إلى "سير العمل الذكي".';
         } else {
-          result = await sendToOpenRouter(messageToSend);
+          responseContent = await sendToOpenRouter(messageToSend);
         }
       }
 
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: result.responseContent,
+        content: responseContent,
         sender: 'bot',
-        timestamp: new Date(),
-        downloadableFile: result.downloadableFile
+        timestamp: new Date()
       };
       setMessages(prev => [...prev, botMessage]);
     } catch (error) {
@@ -436,30 +363,6 @@ const ChatBot: React.FC<ChatBotProps> = ({ onBack }) => {
                           )}
                         </div>
                       ))}
-                    </div>
-                  )}
-
-                  {/* عرض الملف القابل للتنزيل */}
-                  {message.downloadableFile && (
-                    <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-blue-500" />
-                          <div>
-                            <p className="text-sm font-medium text-gray-700">{message.downloadableFile.name}</p>
-                            <p className="text-xs text-gray-500">
-                              {formatFileSize(message.downloadableFile.size)} • ملف نصي
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => downloadTextFile(message.downloadableFile!.name, message.downloadableFile!.content)}
-                          className="flex items-center gap-1 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded-lg transition-colors"
-                        >
-                          <Download className="w-3 h-3" />
-                          تنزيل
-                        </button>
-                      </div>
                     </div>
                   )}
                 </div>
