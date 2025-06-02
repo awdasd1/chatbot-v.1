@@ -27,6 +27,10 @@ const ChatBot: React.FC<ChatBotProps> = ({ onBack }) => {
   const [selectedModel, setSelectedModel] = useState('gpt-4');
   const [isLoading, setIsLoading] = useState(false);
   const [attachments, setAttachments] = useState<File[]>([]);
+  const [sessionId] = useState(() => {
+    // إنشاء sessionId فريد لكل جلسة محادثة
+    return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -47,8 +51,14 @@ const ChatBot: React.FC<ChatBotProps> = ({ onBack }) => {
         },
         body: JSON.stringify({
           message: message,
+          sessionId: sessionId,
           timestamp: new Date().toISOString(),
-          user: 'chatbot-user'
+          user: 'chatbot-user',
+          conversationHistory: messages.slice(-10).map(msg => ({
+            role: msg.sender === 'user' ? 'user' : 'assistant',
+            content: msg.content,
+            timestamp: msg.timestamp.toISOString()
+          }))
         })
       });
 
@@ -66,6 +76,15 @@ const ChatBot: React.FC<ChatBotProps> = ({ onBack }) => {
 
   const sendToOpenRouter = async (message: string) => {
     try {
+      // إنشاء تاريخ المحادثة للسياق
+      const conversationHistory = messages.slice(-10).map(msg => ({
+        role: msg.sender === 'user' ? 'user' : 'assistant',
+        content: msg.content
+      }));
+
+      // إضافة الرسالة الحالية
+      conversationHistory.push({ role: 'user', content: message });
+
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -74,9 +93,11 @@ const ChatBot: React.FC<ChatBotProps> = ({ onBack }) => {
         },
         body: JSON.stringify({
           model: selectedModel,
-          messages: [
-            { role: 'user', content: message }
-          ]
+          messages: conversationHistory,
+          metadata: {
+            sessionId: sessionId,
+            timestamp: new Date().toISOString()
+          }
         })
       });
 
@@ -197,6 +218,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ onBack }) => {
                 {selectedModel === 'n8n-workflow' ? 'سير العمل الذكي' : 'تشات بوت ذكي'}
               </h1>
               <p className="text-sm text-gray-500">متصل الآن</p>
+              <p className="text-xs text-gray-400">الجلسة: {sessionId.split('_')[1]}</p>
             </div>
           </div>
 
