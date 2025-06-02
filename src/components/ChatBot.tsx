@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, ArrowLeft, Bot, User, Paperclip, Image, FileText, ChevronDown, Trash2 } from 'lucide-react';
+import { Send, ArrowLeft, Bot, User, Paperclip, Image, FileText, ChevronDown, Trash2, Workflow } from 'lucide-react';
 import ModelSelector from './ModelSelector';
 
 interface Message {
@@ -38,6 +38,58 @@ const ChatBot: React.FC<ChatBotProps> = ({ onBack }) => {
     scrollToBottom();
   }, [messages]);
 
+  const sendToN8nWorkflow = async (message: string) => {
+    try {
+      const response = await fetch('https://n.mja.lat/webhook/d9a5adad-f921-42d9-adbe-79d11e58cd8a/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: message,
+          timestamp: new Date().toISOString(),
+          user: 'chatbot-user'
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.response || data.message || 'تم استلام رسالتك بنجاح من سير العمل';
+      } else {
+        throw new Error('فشل في الاتصال بسير العمل');
+      }
+    } catch (error) {
+      throw new Error('عذراً، حدث خطأ في الاتصال بسير العمل');
+    }
+  };
+
+  const sendToOpenRouter = async (message: string) => {
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer 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',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: selectedModel,
+          messages: [
+            { role: 'user', content: message }
+          ]
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.choices[0].message.content;
+      } else {
+        throw new Error('فشل في الاتصال بالخدمة');
+      }
+    } catch (error) {
+      throw new Error('عذراً، حدث خطأ في الاتصال. يرجى المحاولة مرة أخرى.');
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!inputMessage.trim() && attachments.length === 0) return;
 
@@ -50,42 +102,31 @@ const ChatBot: React.FC<ChatBotProps> = ({ onBack }) => {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const messageToSend = inputMessage;
     setInputMessage('');
     setAttachments([]);
     setIsLoading(true);
 
     try {
-      // Simulate API call to OpenRouter
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer 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',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: selectedModel,
-          messages: [
-            { role: 'user', content: inputMessage }
-          ]
-        })
-      });
+      let responseContent: string;
 
-      if (response.ok) {
-        const data = await response.json();
-        const botMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          content: data.choices[0].message.content,
-          sender: 'bot',
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, botMessage]);
+      if (selectedModel === 'n8n-workflow') {
+        responseContent = await sendToN8nWorkflow(messageToSend);
       } else {
-        throw new Error('فشل في الاتصال بالخدمة');
+        responseContent = await sendToOpenRouter(messageToSend);
       }
+
+      const botMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: responseContent,
+        sender: 'bot',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, botMessage]);
     } catch (error) {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: 'عذراً، حدث خطأ في الاتصال. يرجى المحاولة مرة أخرى.',
+        content: error instanceof Error ? error.message : 'حدث خطأ غير متوقع',
         sender: 'bot',
         timestamp: new Date()
       };
@@ -112,6 +153,27 @@ const ChatBot: React.FC<ChatBotProps> = ({ onBack }) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  const getBotIcon = () => {
+    if (selectedModel === 'n8n-workflow') {
+      return <Workflow className="w-6 h-6 text-white" />;
+    }
+    return <Bot className="w-6 h-6 text-white" />;
+  };
+
+  const getBotIconSmall = () => {
+    if (selectedModel === 'n8n-workflow') {
+      return <Workflow className="w-4 h-4 text-white" />;
+    }
+    return <Bot className="w-4 h-4 text-white" />;
+  };
+
+  const getChatGradient = () => {
+    if (selectedModel === 'n8n-workflow') {
+      return 'bg-gradient-to-r from-green-500 to-emerald-600';
+    }
+    return 'chat-gradient';
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       {/* Header */}
@@ -126,11 +188,13 @@ const ChatBot: React.FC<ChatBotProps> = ({ onBack }) => {
           </button>
           
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 chat-gradient rounded-full flex items-center justify-center">
-              <Bot className="w-6 h-6 text-white" />
+            <div className={`w-10 h-10 ${getChatGradient()} rounded-full flex items-center justify-center`}>
+              {getBotIcon()}
             </div>
             <div>
-              <h1 className="font-semibold text-gray-800">تشات بوت ذكي</h1>
+              <h1 className="font-semibold text-gray-800">
+                {selectedModel === 'n8n-workflow' ? 'سير العمل الذكي' : 'تشات بوت ذكي'}
+              </h1>
               <p className="text-sm text-gray-500">متصل الآن</p>
             </div>
           </div>
@@ -148,8 +212,8 @@ const ChatBot: React.FC<ChatBotProps> = ({ onBack }) => {
               className={`flex gap-3 ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               {message.sender === 'bot' && (
-                <div className="w-8 h-8 chat-gradient rounded-full flex items-center justify-center flex-shrink-0">
-                  <Bot className="w-4 h-4 text-white" />
+                <div className={`w-8 h-8 ${getChatGradient()} rounded-full flex items-center justify-center flex-shrink-0`}>
+                  {getBotIconSmall()}
                 </div>
               )}
               
@@ -197,8 +261,8 @@ const ChatBot: React.FC<ChatBotProps> = ({ onBack }) => {
           
           {isLoading && (
             <div className="flex gap-3 justify-start">
-              <div className="w-8 h-8 chat-gradient rounded-full flex items-center justify-center">
-                <Bot className="w-4 h-4 text-white" />
+              <div className={`w-8 h-8 ${getChatGradient()} rounded-full flex items-center justify-center`}>
+                {getBotIconSmall()}
               </div>
               <div className="bg-white shadow-sm border border-gray-100 rounded-2xl px-4 py-3">
                 <div className="flex gap-1">
@@ -257,7 +321,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ onBack }) => {
               <textarea
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
-                placeholder="اكتب رسالتك هنا..."
+                placeholder={selectedModel === 'n8n-workflow' ? 'اكتب رسالتك لسير العمل...' : 'اكتب رسالتك هنا...'}
                 className="w-full resize-none border-0 focus:ring-0 focus:outline-none text-gray-800 placeholder-gray-500"
                 rows={1}
                 onKeyDown={(e) => {
@@ -272,7 +336,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ onBack }) => {
             <button
               onClick={handleSendMessage}
               disabled={isLoading || (!inputMessage.trim() && attachments.length === 0)}
-              className="flex-shrink-0 w-10 h-10 chat-gradient rounded-xl flex items-center justify-center transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              className={`flex-shrink-0 w-10 h-10 ${getChatGradient()} rounded-xl flex items-center justify-center transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100`}
             >
               <Send className="w-5 h-5 text-white" />
             </button>
